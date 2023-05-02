@@ -9,13 +9,18 @@ import * as githubService from '../github'
 import * as googleService from '../google'
 import User, { schema } from '../../api/user/model'
 
-export const password = () => (req, res, next) =>
+export const password = () => (req, res, next) => 
   passport.authenticate('password', { session: false }, (err, user, info) => {
     if (err && err.param) {
       return res.status(400).json(err)
-    } else if (err || !user) {
+    } else if (err || !user) { // додати логіку перевірки чи авторизований юзер // залежно від результату посилати різні статуси
       return res.status(401).end()
     }
+    
+      if (!user.isVerified) {
+        res.status(401).json({ message: 'User is not verified' });
+      }
+
     req.logIn(user, { session: false }, (err) => {
       if (err) return res.status(401).end()
       next()
@@ -45,14 +50,14 @@ export const token = ({ required, roles = User.roles } = {}) => (req, res, next)
     })
   })(req, res, next)
 
-passport.use('password', new BasicStrategy((email, password, done) => {
-  const userSchema = new Schema({ email: schema.tree.email, password: schema.tree.password })
+passport.use('password', new BasicStrategy((phoneNumber, password, done) => {
+  const userSchema = new Schema({ phoneNumber: schema.tree.phoneNumber, password: schema.tree.password })
 
-  userSchema.validate({ email, password }, (err) => {
+  userSchema.validate({ phoneNumber, password }, (err) => {
     if (err) done(err)
   })
 
-  User.findOne({ email }).then((user) => {
+  User.findOne({ phoneNumber }).then((user) => {
     if (!user) {
       done(true)
       return null

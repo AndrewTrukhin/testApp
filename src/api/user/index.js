@@ -1,14 +1,14 @@
 import { Router } from 'express';
 import { middleware as query } from 'querymen';
 import { middleware as body } from 'bodymen';
-import { password as passwordAuth, master, token } from '../../services/passport';
-import { index, showMe, show, create, update, updatePassword, destroy } from './controller';
+import { master, token } from '../../services/passport';
+import { index, showMe, show, create, update, destroy, verifyUser, /*signIn,*/ resendSMS } from './controller';
 import { schema } from './model';
 import { User } from './model';
 export User, { schema } from './model';
 
 const router = new Router();
-const { email, password, name, picture, role } = schema.tree;
+const { email, password, name, phoneNumber, picture, role } = schema.tree;
 
 
 router.get('/',
@@ -20,6 +20,20 @@ router.get('/',
 router.get('/me',
   token({ required: true }),
   showMe);
+
+router.post('/create',
+  body({ email, password, name, phoneNumber, picture, role }),
+  create);
+
+router.post('/resendSMS',
+  body({ phoneNumber }),
+  resendSMS);
+
+router.post('/verify',
+  body({ phoneNumber }),
+  verifyUser);
+
+//router.post('/login', signIn);
 
 
 router.get('/:id',

@@ -1,5 +1,6 @@
 import { User, schema } from '.';
 import { sign } from '../../services/jwt';
+import { sendSMS, smsVerification } from '../auth/controller';
 
 
 export const index = async ({ querymen: { query, select, cursor } }, res) => {
@@ -34,28 +35,81 @@ export const showMe = ({ user }, res) =>
   res.json(user.view(true));
 
 
-export const create = async ({ bodymen: { body } }, res, next) => {
+export const create = async (req, res) => {
   try {
-    const user = await User.create(body);
-    const token = await sign(user.id);
-    const result = { token, user: user.view(true) };
-    return res.status(201).json(result);
+    const user = await User.create(req.body);
+    const userPhoneNumber = req.body.phoneNumber;
+    const sendSMSResult = await sendSMS(userPhoneNumber);
+    return res.status(201).json({
+      user: user.view(true),
+      status: sendSMSResult.status,
+      message: 'Verification code was sent succesfully'
+    });
   } catch (error) {
     /* istanbul ignore else */
-    if (error.name === 'MongoError' && error.code === 11000) {
-      res.status(409).json({
-        valid: false,
-        param: 'email',
-        message: 'email already registered'
-      });
+    console.log('---------------SAME USER---------------\n', error)
+    console.log('KeyValue------\n', error.keyValue)
+    if (error.name === 'MongoError' && error.code === 11000) { 
+      const uniqueProperties = Object.keys(error.keyValue);
+      const duplicatedValue = uniqueProperties[0];
+      if (duplicatedValue) { 
+        res.status(409).json({
+          valid: false,
+          param: duplicatedValue,
+          message: `${duplicatedValue} already registered`
+        });
+      }
     } else {
-      next(error);
       console.log(`Error ${error} when creating user`);
       return res.status(500).json({ Error: 'Server error' });
     }
   }
 }
 
+export const resendSMS = async (req, res) => {
+  try {
+    const userPhoneNumber = req.body.phoneNumber;
+    const user = await User.findOne({ phoneNumber: userPhoneNumber });
+    if (!user) {
+      return res.status(404).json({ message: 'Such a phonenumber not found' });
+    }
+    if (user.isVerified) {
+      return res.status(422).json({ message: 'You already have an account. Please login to proceed' });
+    }
+
+    const sendSMSResult = await sendSMS(userPhoneNumber);
+    return res.status(200).json({
+      status: sendSMSResult.status,
+      message: 'SMS was resend succesfully',
+    });
+  } catch (error) {
+    console.log(`WARNING: ${error}`);
+    return res.status(500).json({ Error: 'Server error' });
+  }
+}
+
+
+export const verifyUser = async (req, res) => {
+  try {
+    const userPhoneNumber = req.body.phoneNumber;
+    const verificationCode = req.body.verificationCode;
+    const user = await User.findOne({ phoneNumber: userPhoneNumber }).select('_id name');
+    const result = await smsVerification(userPhoneNumber, verificationCode);
+    if (result.status !== 'approved') {
+      return res.status(400).json({ message: 'Invalid verification code' });
+    }
+    user.isVerified = true;
+    await user.save();
+    return res.status(200).json({
+      user: user,
+      status: result.status,
+      message: 'Verification succesful',
+    });
+  } catch (error) {
+    console.log(`WARNING: ${error}`);
+    return res.status(500).json({ Error: 'Server error' });
+  }
+}
 
 export const update = async ({ bodymen: { body }, params, user }, res) => {
   try {
@@ -83,7 +137,7 @@ export const update = async ({ bodymen: { body }, params, user }, res) => {
 export const destroy = async ({ params }, res) => {
   try {
     const user = await User.findById(params.id);
-    if(!user) {
+    if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     await user.remove();

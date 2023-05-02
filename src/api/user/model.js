@@ -26,6 +26,18 @@ const userSchema = new Schema({
     index: true,
     trim: true
   },
+  phoneNumber: {
+    type: String,
+    match: /^\+?[0-9(),.-]+$/,
+    required: true,
+    unique: true,
+    trim: true,
+    index: true,
+  },
+  isVerified: {
+    type: Boolean,
+    default: false,
+  },
   services: {
     facebook: String,
     github: String,
